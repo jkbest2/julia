@@ -195,11 +195,10 @@
 
 ;; convert list of names (sl) and list of upper bounds to expressions that
 ;; construct TypeVars
-(define (symbols->typevars sl upperbounds bnd)
-  (let ((bnd (if bnd '(true) '())))
-    (if (null? upperbounds)
-        (map (lambda (x)    `(call (core TypeVar) ',x ,@bnd)) sl)
-        (map (lambda (x ub) `(call (core TypeVar) ',x ,ub ,@bnd)) sl upperbounds))))
+(define (symbols->typevars sl upperbounds)
+  (if (null? upperbounds)
+      (map (lambda (x)    `(call (core TypeVar) ',x)) sl)
+      (map (lambda (x ub) `(call (core TypeVar) ',x ,ub)) sl upperbounds)))
 
 ;; extract type variable name from A<:B expressions
 (define (sparam-name sp)
@@ -238,7 +237,7 @@
       (let ((lst '()))
         (pattern-replace
          (pattern-set
-          (pattern-lambda (= v (call (core (-/ TypeVar)) (quote T) y z))
+          (pattern-lambda (= v (call (core (-/ TypeVar)) (quote T) ...))
                           (begin (set! lst (cons T lst)) __)))
          (butlast (cdr (caddr m))))
         (reverse! lst))
@@ -357,7 +356,8 @@
                            ,body ,isstaged)
                   `(method ,name
                            (block
-                            ,@(map make-assignment temps (symbols->typevars names bounds #t))
+                            ,@(map (lambda (l r) (make-assignment l (replace-vars r renames)))
+                                   temps (symbols->typevars names bounds))
                             (call (core svec) (call (core svec)
                                                     ,@(dots->vararg
                                                        (map (lambda (ty)
@@ -830,7 +830,7 @@
         (block
          (global ,name) (const ,name)
          ,@(map (lambda (v) `(local ,v)) params)
-         ,@(map make-assignment params (symbols->typevars params bounds #f))
+         ,@(map make-assignment params (symbols->typevars params bounds))
          (composite_type ,name (call (core svec) ,@params)
                          (call (core svec) ,@(map (lambda (x) `',x) field-names))
                          ,super (call (core svec) ,@field-types) ,mut ,min-initialized)))
@@ -866,7 +866,7 @@
      (scope-block
       (block
        ,@(map (lambda (v) `(local ,v)) params)
-       ,@(map make-assignment params (symbols->typevars params bounds #f))
+       ,@(map make-assignment params (symbols->typevars params bounds))
        (abstract_type ,name (call (core svec) ,@params) ,super))))))
 
 (define (bits-def-expr n name params super)
@@ -877,7 +877,7 @@
      (scope-block
       (block
        ,@(map (lambda (v) `(local ,v)) params)
-       ,@(map make-assignment params (symbols->typevars params bounds #f))
+       ,@(map make-assignment params (symbols->typevars params bounds))
        (bits_type ,name (call (core svec) ,@params) ,n ,super))))))
 
 ;; take apart a type signature, e.g. T{X} <: S{Y}
@@ -1211,10 +1211,10 @@
                 ,@(map (lambda (v) `(local ,v)) params)
                 ,@(map (lambda (l r) (make-assignment l (expand-forms r)))
                        params
-                       (symbols->typevars params bounds #f))
-                (call (core TypeConstructor)
-                      (call (core svec) ,@params)
-                      ,(expand-forms type-ex))))))))
+                       (symbols->typevars params bounds))
+                ,(foldl (lambda (var type) `(call (core UnionAll) ,var ,type))
+                        (expand-forms type-ex)
+                        (reverse params))))))))
       (expand-forms
        `(const (= ,(cadr e) ,(caddr e))))))
 
@@ -2598,7 +2598,7 @@ f(x) = yt(x)
       (lambda ()
         (() () 0 ())
         (body (global ,name) (const ,name)
-              ,@(map (lambda (p n) `(= ,p (call (core TypeVar) ',n (core Any) false))) P names)
+              ,@(map (lambda (p n) `(= ,p (call (core TypeVar) ',n (core Any)))) P names)
               (composite_type ,name (call (core svec) ,@P)
                               (call (core svec) ,@(map (lambda (v) `',v) fields))
                               ,super
@@ -2625,7 +2625,7 @@ f(x) = yt(x)
 ;  (let ((n (length P)))
 ;        `((global ,name)
 ;          (const ,name)
-;          ,@(map (lambda (p n) `(= ,p (call (core TypeVar) ',n (core Any) false))) P names)
+;          ,@(map (lambda (p n) `(= ,p (call (core TypeVar) ',n (core Any)))) P names)
 ;          (composite_type ,name (call (core svec) ,@P)
 ;                          (call (core svec) ,@(map (lambda (v) `',v) fields))
 ;                          ,super
@@ -3022,7 +3022,7 @@ f(x) = yt(x)
                                                 (fix-function-arg-type sig type-name iskw namemap closure-param-syms)
                                                 renamemap)))
                                     (append (map (lambda (gs tvar)
-                                                   (make-assignment gs `(call (core TypeVar) ',tvar (core Any) true)))
+                                                   (make-assignment gs `(call (core TypeVar) ',tvar (core Any))))
                                                   closure-param-syms closure-param-names)
                                             `((method #f ,(cl-convert arg-defs fname lam namemap toplevel interp)
                                                   ,(convert-lambda lam2
