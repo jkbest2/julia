@@ -19,9 +19,18 @@ function argtype_decl(env, n, sig::DataType, i::Int, nargs, isva::Bool) # -> (ar
         return s, ""
     end
     if isvarargtype(t)
+        v1, v2 = nothing, nothing
+        if isa(t, UnionAll)
+            v1 = t.var
+            t = t.body
+            if isa(t, UnionAll)
+                v2 = t.var
+                t = t.body
+            end
+        end
         tt, tn = t.parameters[1], t.parameters[2]
-        if isa(tn, TypeVar) && !tn.bound
-            if tt === Any || (isa(tt, TypeVar) && !tt.bound)
+        if isa(tn, TypeVar) && (tn === v1 || tn === v2)
+            if tt === Any || (isa(tt, TypeVar) && (tt === v1 || tt === v2))
                 return string(s, "..."), ""
             else
                 return s, string_with_env(env, tt) * "..."
@@ -50,7 +59,8 @@ function arg_decl_parts(m::Method)
     line = m.line
     if src !== nothing && src.slotnames !== nothing
         argnames = src.slotnames[1:m.nargs]
-        decls = Any[argtype_decl(:tvar_env => tv, argnames[i], m.sig, i, m.nargs, m.isva)
+        sig = unwrap_unionall(m.sig)
+        decls = Any[argtype_decl(:tvar_env => tv, argnames[i], sig, i, m.nargs, m.isva)
                     for i = 1:m.nargs]
     else
         decls = Any[("", "") for i = 1:length(m.sig.parameters)]
@@ -77,9 +87,10 @@ end
 
 function show(io::IO, m::Method; kwtype::Nullable{DataType}=Nullable{DataType}())
     tv, decls, file, line = arg_decl_parts(m)
-    ft = m.sig.parameters[1]
+    sig = unwrap_unionall(m.sig)
+    ft = sig.parameters[1]
     d1 = decls[1]
-    if m.sig === Tuple
+    if sig === Tuple
         print(io, m.name)
         decls = Any[(), ("...", "")]
     elseif ft <: Function &&
@@ -87,7 +98,7 @@ function show(io::IO, m::Method; kwtype::Nullable{DataType}=Nullable{DataType}()
                 # TODO: more accurate test? (tn.name === "#" name)
             ft == typeof(getfield(ft.name.module, ft.name.mt.name))
         print(io, ft.name.mt.name)
-    elseif isa(ft, DataType) && ft.name === Type.name && isleaftype(ft)
+    elseif isa(ft, DataType) && ft.name === Type.body.name && isleaftype(ft)
         f = ft.parameters[1]
         if isa(f, DataType) && isempty(f.parameters)
             print(io, f)
@@ -104,7 +115,7 @@ function show(io::IO, m::Method; kwtype::Nullable{DataType}=Nullable{DataType}()
     join(io, [isempty(d[2]) ? d[1] : d[1]*"::"*d[2] for d in decls[2:end]],
                  ", ", ", ")
     if !isnull(kwtype)
-        kwargs = kwarg_decl(m.sig, get(kwtype))
+        kwargs = kwarg_decl(sig, get(kwtype))
         if !isempty(kwargs)
             print(io, "; ")
             join(io, kwargs, ", ", ", ")
@@ -202,13 +213,14 @@ end
 
 function show(io::IO, ::MIME"text/html", m::Method; kwtype::Nullable{DataType}=Nullable{DataType}())
     tv, decls, file, line = arg_decl_parts(m)
-    ft = m.sig.parameters[1]
+    sig = unwrap_unionall(m.sig)
+    ft = sig.parameters[1]
     d1 = decls[1]
     if ft <: Function &&
             isdefined(ft.name.module, ft.name.mt.name) &&
             ft == typeof(getfield(ft.name.module, ft.name.mt.name))
         print(io, ft.name.mt.name)
-    elseif isa(ft, DataType) && ft.name === Type.name && isleaftype(ft)
+    elseif isa(ft, DataType) && ft.name === Type.body.name && isleaftype(ft)
         f = ft.parameters[1]
         if isa(f, DataType) && isempty(f.parameters)
             print(io, f)
@@ -227,7 +239,7 @@ function show(io::IO, ::MIME"text/html", m::Method; kwtype::Nullable{DataType}=N
     join(io, [isempty(d[2]) ? d[1] : d[1]*"::<b>"*d[2]*"</b>"
                       for d in decls[2:end]], ", ", ", ")
     if !isnull(kwtype)
-        kwargs = kwarg_decl(m.sig, get(kwtype))
+        kwargs = kwarg_decl(sig, get(kwtype))
         if !isempty(kwargs)
             print(io, "; <i>")
             join(io, kwargs, ", ", ", ")
