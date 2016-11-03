@@ -10,6 +10,7 @@
   (append! (add-dots '(= += -= *= /= //= |\\=| ^= ÷= %= <<= >>= >>>= |\|=| &= ⊻=))
            '(:= => ~ $=)))
 (define prec-conditional '(?))
+;; `where`
 (define prec-arrow       (append!
                           '(-- -->)
                           (add-dots '(← → ↔ ↚ ↛ ↠ ↣ ↦ ↮ ⇎ ⇏ ⇒ ⇔ ⇴ ⇶ ⇷ ⇸ ⇹ ⇺ ⇻ ⇼ ⇽ ⇾ ⇿ ⟵ ⟶ ⟷ ⟷ ⟹ ⟺ ⟻ ⟼ ⟽ ⟾ ⟿ ⤀ ⤁ ⤂ ⤃ ⤄ ⤅ ⤆ ⤇ ⤌ ⤍ ⤎ ⤏ ⤐ ⤑ ⤔ ⤕ ⤖ ⤗ ⤘ ⤝ ⤞ ⤟ ⤠ ⥄ ⥅ ⥆ ⥇ ⥈ ⥊ ⥋ ⥎ ⥐ ⥒ ⥓ ⥖ ⥗ ⥚ ⥛ ⥞ ⥟ ⥢ ⥤ ⥦ ⥧ ⥨ ⥩ ⥪ ⥫ ⥬ ⥭ ⥰ ⧴ ⬱ ⬰ ⬲ ⬳ ⬴ ⬵ ⬶ ⬷ ⬸ ⬹ ⬺ ⬻ ⬼ ⬽ ⬾ ⬿ ⭀ ⭁ ⭂ ⭃ ⭄ ⭇ ⭈ ⭉ ⭊ ⭋ ⭌ ￩ ￫))))
@@ -570,7 +571,7 @@
          ex)))
 
 (define (parse-cond s)
-  (let ((ex (parse-arrow s)))
+  (let ((ex (parse-where s)))
     (cond ((eq? (peek-token s) '?)
            (begin (take-token s)
                   (let ((then (without-range-colon (parse-eq* s))))
@@ -578,6 +579,21 @@
                         (error "colon expected in \"?\" expression")
                         (list 'if ex then (parse-eq* s))))))
           (else ex))))
+
+(define (parse-where-chain s first)
+  (let loop ((ex first)
+             (t 'where))
+    (if (eq? t 'where)
+        (begin (take-token s)
+               (loop (list 'where ex (parse-comparison s)) (peek-token s)))
+        ex)))
+
+(define (parse-where s)
+  (let ((ex (parse-arrow s))
+        (t  (peek-token s)))
+    (if (eq? t 'where)
+        (parse-where-chain s ex)
+        ex)))
 
 (define (invalid-initial-token? tok)
   (or (eof-object? tok)
@@ -960,16 +976,18 @@
         (parse-call-chain s ex #f))))
 
 (define (parse-def s is-func)
-  (let ((ex (parse-unary-prefix s)))
-    (let ((sig (if (or (and is-func (reserved-word? ex)) (initial-reserved-word? ex))
-                   (error (string "invalid name \"" ex "\""))
-                   (parse-call-chain s ex #f))))
-      (if (and is-func
-               (eq? (peek-token s) '|::|))
-          (begin (take-token s)
-                 `(|::| ,sig ,(parse-call s)))
-          sig))))
-
+  (let* ((ex (parse-unary-prefix s))
+         (sig (if (or (and is-func (reserved-word? ex)) (initial-reserved-word? ex))
+                  (error (string "invalid name \"" ex "\""))
+                  (parse-call-chain s ex #f)))
+         (decl-sig
+          (if (and is-func (eq? (peek-token s) '|::|))
+              (begin (take-token s)
+                     `(|::| ,sig ,(parse-call s)))
+              sig)))
+    (if (eq? (peek-token s) 'where)
+        (parse-where-chain s decl-sig)
+        decl-sig)))
 
 (define (deprecated-dict-replacement ex)
   (if (dict-literal? ex)
@@ -1101,6 +1119,16 @@
 (define (parse-subtype-spec s)
   (parse-comparison s))
 
+(define (valid-func-sig? sig)
+  (and (pair? sig)
+       (or (eq? (car sig) 'call)
+           (eq? (car sig) 'tuple)
+           (and (eq? (car sig) '|::|)
+                (pair? (cadr sig))
+                (eq? (car (cadr sig)) 'call))
+           (and (eq? (car sig) 'where)
+                (valid-func-sig? (cadr sig))))))
+
 ;; parse expressions or blocks introduced by syntactic reserved words
 (define (parse-resword s word)
   (with-bindings
@@ -1194,12 +1222,7 @@
                                     `(tuple ,sig)
                                     ;; function foo  =>  syntax error
                                     (error (string "expected \"(\" in " word " definition")))
-                                (if (not (and (pair? sig)
-                                              (or (eq? (car sig) 'call)
-                                                  (eq? (car sig) 'tuple)
-                                                  (and (eq? (car sig) '|::|)
-                                                       (pair? (cadr sig))
-                                                       (eq? (car (cadr sig)) 'call)))))
+                                (if (not (valid-func-sig? sig))
                                     (error (string "expected \"(\" in " word " definition"))
                                     sig)))
                      (body  (parse-block s)))
@@ -1220,7 +1243,7 @@
               (parse-subtype-spec s)))
        ((typealias)
         (let ((lhs (with-space-sensitive (parse-call s))))
-              (list 'typealias lhs (parse-arrow s))))
+              (list 'typealias lhs (parse-where s))))
        ((try)
         (let ((try-block (if (memq (require-token s) '(catch finally))
                              '(block)
