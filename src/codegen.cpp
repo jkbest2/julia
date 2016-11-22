@@ -4228,6 +4228,7 @@ static std::unique_ptr<Module> emit_function(jl_method_instance_t *lam, jl_code_
             needsparams = true;
     }
     if (!va && ctx.nargs > 0 && !needsparams && lam->specTypes != (jl_value_t*)jl_anytuple_type && src->inferred) {
+        assert(jl_is_datatype(lam->specTypes));
         // not vararg, consider specialized signature
         for(size_t i=0; i < jl_nparams(lam->specTypes); i++) {
             if (isbits_spec(jl_tparam(lam->specTypes, i))) { // assumes !va

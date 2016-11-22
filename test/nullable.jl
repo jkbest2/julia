@@ -285,9 +285,9 @@ for T in types
 end
 
 # Operators
-TestTypes = Union{Base.NullSafeTypes, BigInt, BigFloat,
-                  Complex{Int}, Complex{Float64}, Complex{BigFloat},
-                  Rational{Int}, Rational{BigInt}}.types
+TestTypes = Any[Base.uniontypes(Base.NullSafeTypes)..., BigInt, BigFloat,
+                Complex{Int}, Complex{Float64}, Complex{BigFloat},
+                Rational{Int}, Rational{BigInt}]
 for S in TestTypes, T in TestTypes
     u0 = zero(S)
     u1 = one(S)

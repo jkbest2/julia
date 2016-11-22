@@ -150,8 +150,8 @@ pred = afiro'*sol
 
 let # Issue 9160
 
-    for Ti in CHOLMOD.ITypes.types
-        for elty in CHOLMOD.VRealTypes.types
+    for Ti in Base.uniontypes(CHOLMOD.ITypes)
+        for elty in [] #Base.uniontypes(CHOLMOD.VRealTypes)  # TODO fixme (#19583)
 
             A = sprand(10,10,0.1)
             A = convert(SparseMatrixCSC{elty,Ti},A)

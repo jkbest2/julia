@@ -117,6 +117,7 @@ julia> fieldname(SparseMatrixCSC,5)
 ```
 """
 fieldname(t::DataType, i::Integer) = t.name.names[i]::Symbol
+fieldname(t::UnionAll, i::Integer) = fieldname(unwrap_unionall(t), i)
 fieldname{T<:Tuple}(t::Type{T}, i::Integer) = i < 1 || i > nfields(t) ? throw(BoundsError(t, i)) : Int(i)
 
 """
@@ -139,6 +140,7 @@ function fieldnames(v)
     return fieldnames(t)
 end
 fieldnames(t::DataType) = Symbol[fieldname(t, n) for n in 1:nfields(t)]
+fieldnames(t::UnionAll) = fieldnames(unwrap_unionall(t))
 fieldnames{T<:Tuple}(t::Type{T}) = Int[n for n in 1:nfields(t)]
 
 """
@@ -376,7 +378,7 @@ function _methods(f::ANY,t::ANY,lim)
 end
 
 function _methods_by_ftype(t::ANY, lim)
-    tp = t.parameters::SimpleVector
+    tp = unwrap_unionall(t).parameters::SimpleVector
     nu = 1
     for ti in tp
         if isa(ti, Union)
@@ -384,15 +386,15 @@ function _methods_by_ftype(t::ANY, lim)
         end
     end
     if 1 < nu <= 64
-        return _methods(Any[tp...], length(tp), lim, [])
+        return _methods(t, Any[tp...], length(tp), lim, [])
     end
     # XXX: the following can return incorrect answers that the above branch would have corrected
     return ccall(:jl_matching_methods, Any, (Any,Cint,Cint), t, lim, 0)
 end
 
-function _methods(t::Array,i,lim::Integer,matching::Array{Any,1})
+function _methods(origt::ANY, t::Array, i, lim::Integer, matching::Array{Any,1})
     if i == 0
-        new = ccall(:jl_matching_methods, Any, (Any,Cint,Cint), Tuple{t...}, lim, 0)
+        new = ccall(:jl_matching_methods, Any, (Any,Cint,Cint), rewrap_unionall(Tuple{t...}, origt), lim, 0)
         new === false && return false
         append!(matching, new::Array{Any,1})
     else
@@ -400,14 +402,14 @@ function _methods(t::Array,i,lim::Integer,matching::Array{Any,1})
         if isa(ti, Union)
             for ty in uniontypes(ti::Union)
                 t[i] = ty
-                if _methods(t,i-1,lim,matching) === false
+                if _methods(origt,t,i-1,lim,matching) === false
                     t[i] = ti
                     return false
                 end
             end
             t[i] = ti
         else
-            return _methods(t,i-1,lim,matching)
+            return _methods(origt,t,i-1,lim,matching)
         end
     end
     return matching

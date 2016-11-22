@@ -22,7 +22,8 @@ for t in (:LowerTriangular, :UnitLowerTriangular, :UpperTriangular,
 
         convert{T,S}(::Type{$t{T}}, A::$t{T,S}) = A
         convert{Tnew,Told,S}(::Type{$t{Tnew}}, A::$t{Told,S}) = (Anew = convert(AbstractMatrix{Tnew}, A.data); $t(Anew))
-        convert{Tnew,Told,S}(::Type{AbstractMatrix{Tnew}}, A::$t{Told,S}) = convert($t{Tnew}, A)
+        convert{Tnew     }(::Type{AbstractMatrix{Tnew}}, A::$t{Tnew}) = A
+        convert{Tnew,Told}(::Type{AbstractMatrix{Tnew}}, A::$t{Told}) = convert($t{Tnew}, A)
         convert{T,S}(::Type{Matrix}, A::$t{T,S}) = convert(Matrix{T}, A)
 
         function similar{T,S,Tnew}(A::$t{T,S}, ::Type{Tnew})
