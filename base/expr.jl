@@ -174,19 +174,6 @@ function find_vars(e, lst)
     lst
 end
 
-# wrap an expression in "let a=a,b=b,..." for each var it references
-localize_vars(expr) = localize_vars(expr, true)
-function localize_vars(expr, esca)
-    v = find_vars(expr)
-    # requires a special feature of the front end that knows how to insert
-    # the correct variables. the list of free variables cannot be computed
-    # from a macro.
-    if esca
-        v = map(esc,v)
-    end
-    Expr(:localize, expr, v...)
-end
-
 function pushmeta!(ex::Expr, sym::Symbol, args::Any...)
     if isempty(args)
         tag = sym
