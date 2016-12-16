@@ -1128,7 +1128,10 @@ remotecall_fetch(()->eval(:(f16091a() = 2)), wid)
 f16091b = () -> 1
 remotecall_fetch(()->eval(:(f16091b = () -> 2)), wid)
 @test remotecall_fetch(f16091b, 2) === 1
-@test remotecall_fetch((myid)->remotecall_fetch(f16091b, myid), wid, myid()) === 2
+
+# FIXME: What is being tested here? Why the difference between named and anonymous functions?
+@test remotecall_fetch((myid)->remotecall_fetch(f16091b, myid), wid, myid()) === 1
+
 
 
 # issue #16451
@@ -1261,3 +1264,53 @@ function test_add_procs_threaded_blas()
     rmprocs(processes_added)
 end
 test_add_procs_threaded_blas()
+
+# Auto serialization of globals from Main
+
+v1 = 1
+@test remotecall_fetch(()->v1, id_other) == v1
+@test remotecall_fetch(()->isdefined(Main, :v1), id_other) == true
+v1 = 2
+@test remotecall_fetch(()->v1, id_other) == 2
+@test remotecall_fetch(()->isdefined(Main, :v1), id_other) == true
+
+v2 = ones(10)
+@test remotecall_fetch(()->v2, id_other) == v2
+v2[2] = 2.0
+@test remotecall_fetch(()->v2, id_other) == v2
+v2[3] = 3.0
+@test remotecall_fetch(()->v2, id_other) == v2
+
+f1 = x->x
+f2 = x->f1(x)
+v = rand()
+@test remotecall_fetch(f2, id_other, v) == v
+@test remotecall_fetch(x->f2(x), id_other, v) == v
+
+function wrapped_vars()
+    v1 = 1
+    @test remotecall_fetch(()->v1, id_other) == v1
+    @test remotecall_fetch(()->isdefined(Main, :v1), id_other) == true
+    v1 = 2
+    @test remotecall_fetch(()->v1, id_other) == 2
+    @test remotecall_fetch(()->isdefined(Main, :v1), id_other) == true
+
+    v2 = ones(10)
+    @test remotecall_fetch(()->v2, id_other) == v2
+    v2[2] = 2.0
+    @test remotecall_fetch(()->v2, id_other) == v2
+    v2[3] = 3.0
+    @test remotecall_fetch(()->v2, id_other) == v2
+
+    f1 = x->x
+    f2 = x->f1(x)
+    v = rand()
+    @test remotecall_fetch(f2, id_other, v) == v
+    @test remotecall_fetch(x->f2(x), id_other, v) == v
+end
+
+wrapped_vars()
+
+
+
+
