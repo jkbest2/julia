@@ -156,24 +156,6 @@ end
 
 ## some macro utilities ##
 
-find_vars(e) = find_vars(e, [])
-function find_vars(e, lst)
-    if isa(e,Symbol)
-        if current_module()===Main && isdefined(e)
-            # Main runs on process 1, so send globals from there, excluding
-            # things defined in Base.
-            if !isdefined(Base,e) || eval(Base,e)!==eval(current_module(),e)
-                push!(lst, e)
-            end
-        end
-    elseif isa(e,Expr) && e.head !== :quote && e.head !== :top && e.head !== :core
-        for x in e.args
-            find_vars(x,lst)
-        end
-    end
-    lst
-end
-
 function pushmeta!(ex::Expr, sym::Symbol, args::Any...)
     if isempty(args)
         tag = sym
